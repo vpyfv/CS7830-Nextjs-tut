@@ -1,26 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
+import { kv } from "@vercel/kv";
+import { Post } from "../../../lib/posts";
 
 export async function POST(req: NextRequest, res: NextResponse) {
   const formData = await req.json();
-  const filePath = "./public/posts.json";
+  var id: number;
 
-  try {
-    const file: any[] = JSON.parse(await fs.promises.readFile(filePath, "utf-8"));
-
-    file.push(formData);
-    var count = -1;
-    for (var post of file) post.id = ++count;
-    await fs.promises.writeFile(filePath, JSON.stringify(file));
-    return NextResponse.json(
-      {
-        message: "Form data saved successfully",
-        id: count,
-      },
-      { status: 200 }
-    );
-  } catch (err) {
-    console.log(err);
-    return NextResponse.json({ error: "could not save form data" }, { status: 500 });
-  }
+  return await kv
+    .hget("posts:all", "posts")
+    .then((postList) => {
+      const posts = postList as Post[];
+      id = posts.length;
+      return posts;
+    })
+    .then((posts) =>
+      kv.hset("posts:all", {
+        posts: [
+          ...posts,
+          {
+            title: formData.title,
+            body: formData.body,
+            id: id,
+          },
+        ],
+      })
+    )
+    .then(() => kv.hget("posts:all", "posts"))
+    .then((p) => console.log(p))
+    .then(() =>
+      NextResponse.json(
+        {
+          message: "Form data saved successfully",
+          id: id,
+        },
+        { status: 200 }
+      )
+    )
+    .catch((err) => NextResponse.json({ error: "could not save form data" }, { status: 500 }));
 }
